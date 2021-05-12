@@ -1,0 +1,91 @@
+service: calvinandhobbes
+
+frameworkVersion: ">=1.1.0 <2.0.0"
+
+plugins:
+  - serverless-plugin-warmup
+  - serverless-dotenv-plugin
+
+provider:
+  name: aws
+  runtime: nodejs10.x
+  stage: ${env:stage, prod}
+  region: us-east-1
+  environment:
+    FAVORITES_TABLE: ${self:service}-${opt:stage, self:provider.stage}-favorites
+    SQS_PATH: ${env:sqsPath}
+    SLACK_SIGNING_SECRET: ${env:slackSigningSecret}
+
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:DeleteItem
+        - dynamodb:UpdateItem
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - lambda:InvokeFunction
+        - "sqs:SendMessage"
+        - "sqs:GetQueueUrl"
+      Resource: "*"
+
+functions:
+  testerFunction:
+    handler: app/private/tester.tester
+    description: Used for testing functions
+  sqsHandler:
+    warmup: ${env:preWarm}
+    prewarm: ${env:preWarm}
+    handler: app/private/sqshandler.sqsHandler
+    batchSize: 1 #This needs to change later...
+    reservedConcurrency: 10
+    description: Parses the SQS Queue
+    events:
+      - sqs: ${env:sqsArn}
+  getFavorites:
+    warmup: ${env:preWarm}
+    prewarm: ${env:preWarm}
+    handler: app/public/favorites.list
+    description: Get all favorites
+    events:
+      - http:
+          path: favorites
+          method: get
+  addFavorite:
+    warmup: ${env:preWarm}
+    prewarm: ${env:preWarm}
+    handler: app/public/favorites.add
+    description: Add a favorite
+    events:
+      - http:
+          path: favorites/{comicId}
+          method: post
+  removeFavorite:
+    warmup: ${env:preWarm}
+    prewarm: ${env:preWarm}
+    handler: app/public/favorites.remove
+    description: remove a favorite
+    events:
+      - http:
+          path: favorites/{comicId}
+          method: delete
+          
+resources:
+  Resources:
+    FavoritesDynamoDbTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: "favoriteId"
+            AttributeType: "S"
+        KeySchema:
+          -
+            AttributeName: "favoriteId"
+            KeyType: "HASH"
+        BillingMode: PAY_PER_REQUEST
+        StreamSpecification:
+          StreamViewType: "NEW_AND_OLD_IMAGES"
+        TableName: ${self:provider.environment.FAVORITES_TABLE}
