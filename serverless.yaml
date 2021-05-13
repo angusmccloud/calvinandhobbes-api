@@ -14,7 +14,6 @@ provider:
   environment:
     FAVORITES_TABLE: ${self:service}-${opt:stage, self:provider.stage}-favorites
     SQS_PATH: ${env:sqsPath}
-    SLACK_SIGNING_SECRET: ${env:slackSigningSecret}
 
   iamRoleStatements:
     - Effect: Allow

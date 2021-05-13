@@ -1,11 +1,11 @@
 'use strict';
-const uuid = require('uuid');
 const AWS = require('aws-sdk');
-const dynamoFetchSingleItem = require('../../functions/dynamo-fetch-single-item');
-const dynamoCreateItem = require('../../functions/dynamo-create-item');
-const dynamoUpdateItem = require('../../functions/dynamo-update-item');
-const formatMovieObject = require('../../functions/format-movie-object');
-const getUserId = require('../../functions/getUserId/getUserId');
+AWS.config.setPromisesDependency(require('bluebird'));
+
+const getUserId = require('../functions/getUserId/getUserId');
+const listAllFavorites = require('../functions/list-all-favorites');
+const addFavorite = require('../functions/add-favorite');
+const removeFavorite = require('../functions/remove-favorite');
 
 module.exports.list = async (event, context, callback) => {
     /** Immediate response for WarmUP plugin so things don't keep running */
@@ -14,13 +14,12 @@ module.exports.list = async (event, context, callback) => {
         return callback(null, 'Lambda is warm!')
     }
 
-    const timestamp = new Date().getTime();
-    const jwtToken = event.headers.jwtHeader;
-    const submittingUserId = await getUserId(jwtToken);
+    const jwtToken = event.headers.jwtheader;
+    const userId = await getUserId(jwtToken);
 
     let anyErrors = false;
     let errorsText = '';
-    if (requestBody.userId === undefined) {
+    if (userId === undefined) {
         anyErrors = true;
         errorsText = 'Invalid request parameters, must include userId';
         console.log('Missing a field');
@@ -39,15 +38,14 @@ module.exports.list = async (event, context, callback) => {
         callback(null, response);
     } else {
         console.log('No Errors');
-
-        // await dynamoUpdateItem(process.env.USERS_TABLE, 'userId', submittingUserId, updatedValues);
+        const favorites = await listAllFavorites(userId);
 
         const response = {
             statusCode: 200,
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify("Here's a List!")
+            body: JSON.stringify(favorites)
         };
 
         callback(null, response);
@@ -61,15 +59,17 @@ module.exports.add = async (event, context, callback) => {
         return callback(null, 'Lambda is warm!')
     }
 
-    const timestamp = new Date().getTime();
-    const jwtToken = event.headers.jwtHeader;
-    const submittingUserId = await getUserId(jwtToken);
+    console.log('-- Event --', event);
+    const jwtToken = event.headers.jwtheader;
+    console.log('-- About to Check UserId for Token', jwtToken);
+    const userId = await getUserId(jwtToken);
+    const comicId = event.pathParameters.comicId;
 
     let anyErrors = false;
     let errorsText = '';
-    if (requestBody.userId === undefined) {
+    if (userId === undefined) {
         anyErrors = true;
-        errorsText = 'Invalid request parameters, must include userId';
+        errorsText = 'Invalid JWT, must include userId';
         console.log('Missing a field');
     } 
 
@@ -87,7 +87,7 @@ module.exports.add = async (event, context, callback) => {
     } else {
         console.log('No Errors');
 
-        // await dynamoUpdateItem(process.env.USERS_TABLE, 'userId', submittingUserId, updatedValues);
+        addFavorite(userId, comicId);
 
         const response = {
             statusCode: 200,
@@ -101,7 +101,6 @@ module.exports.add = async (event, context, callback) => {
     }
 };
 
-
 module.exports.remove = async (event, context, callback) => {
     /** Immediate response for WarmUP plugin so things don't keep running */
     if (event.source === 'serverless-plugin-warmup') {
@@ -109,15 +108,15 @@ module.exports.remove = async (event, context, callback) => {
         return callback(null, 'Lambda is warm!')
     }
 
-    const timestamp = new Date().getTime();
-    const jwtToken = event.headers.jwtHeader;
-    const submittingUserId = await getUserId(jwtToken);
+    const jwtToken = event.headers.jwtheader;
+    const userId = await getUserId(jwtToken);
+    const comicId = event.pathParameters.comicId;
 
     let anyErrors = false;
     let errorsText = '';
-    if (requestBody.userId === undefined) {
+    if (userId === undefined) {
         anyErrors = true;
-        errorsText = 'Invalid request parameters, must include userId';
+        errorsText = 'Invalid JWT, must include userId';
         console.log('Missing a field');
     } 
 
@@ -135,16 +134,16 @@ module.exports.remove = async (event, context, callback) => {
     } else {
         console.log('No Errors');
 
-        // await dynamoUpdateItem(process.env.USERS_TABLE, 'userId', submittingUserId, updatedValues);
+        removeFavorite(userId, comicId);
 
         const response = {
             statusCode: 200,
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify("Delete Successfully")
+            body: JSON.stringify("Added Successfully")
         };
 
         callback(null, response);
     }
-}
+};
